@@ -1,4 +1,4 @@
-name: Terraform Pipeline
+name: Terraform Deployment
 
 on:
   push:
@@ -10,23 +10,36 @@ on:
 jobs:
   terraform:
     runs-on: ubuntu-latest
+    env:
+      AWS_REGION: "us-east-1"
+    
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v2
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
-    - name: Setup Terraform
-      uses: hashicorp/setup-terraform@v1
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.6.0
 
-    - name: Initialize Terraform
-      run: terraform init -backend-config="env/${{ github.ref_name }}.tfbackend"
+      - name: Configure AWS Credentials
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        run: echo "AWS credentials configured"
 
-    - name: Terraform Plan
-      run: terraform plan -var="environment=${{ github.ref_name }}"
+      - name: Terraform Init
+        run: terraform init
 
-    - name: Terraform Apply (Only for Dev & UAT)
-      if: github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/uat'
-      run: terraform apply -auto-approve -var="environment=${{ github.ref_name }}"
+      - name: Terraform Plan
+        run: terraform plan -out=tfplan
 
-    - name: Terraform Apply for Prod (Manual Approval Required)
-      if: github.ref == 'refs/heads/main'
-      run: terraform apply -auto-approve -var="environment=prod"
+      - name: Manual Approval for UAT & Master
+        if: github.ref == 'refs/heads/uat' || github.ref == 'refs/heads/master'
+        uses: hmarr/auto-approve-action@v3
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Terraform Apply
+        if: github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/uat' || github.ref == 'refs/heads/master'
+        run: terraform apply -auto-approve tfplan
