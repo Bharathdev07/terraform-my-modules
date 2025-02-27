@@ -1,0 +1,32 @@
+name: Terraform Pipeline
+
+on:
+  push:
+    branches:
+      - dev
+      - uat
+      - master
+
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v1
+
+    - name: Initialize Terraform
+      run: terraform init -backend-config="env/${{ github.ref_name }}.tfbackend"
+
+    - name: Terraform Plan
+      run: terraform plan -var="environment=${{ github.ref_name }}"
+
+    - name: Terraform Apply (Only for Dev & UAT)
+      if: github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/uat'
+      run: terraform apply -auto-approve -var="environment=${{ github.ref_name }}"
+
+    - name: Terraform Apply for Prod (Manual Approval Required)
+      if: github.ref == 'refs/heads/main'
+      run: terraform apply -auto-approve -var="environment=prod"
